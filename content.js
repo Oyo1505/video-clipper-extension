@@ -1,8 +1,9 @@
 (() => {
   const MAX_CLIP_SECONDS = 60;
+  const DEFAULT_CLIP_SECONDS = 15;
 
   let video = null;
-  let panelState = null; // { start, end, dragging, recording }
+  let panelState = null; // { start, end, duration, recording }
 
   function fmtTime(seconds) {
     seconds = Math.max(0, Math.floor(seconds));
@@ -23,41 +24,34 @@
     return Math.min(max, Math.max(min, value));
   }
 
-  // Zooms the track onto a window around the selection instead of the whole video,
-  // otherwise a 60s clip is a few unusable pixels wide on a long video.
-  function computeInitialView(start, end, duration) {
-    const span = Math.min(duration, Math.max(MAX_CLIP_SECONDS * 2, 120));
-    let viewStart = clamp((start + end) / 2 - span / 2, 0, Math.max(0, duration - span));
-    const viewEnd = Math.min(duration, viewStart + span);
-    return { viewStart, viewEnd };
-  }
-
-  // While dragging, shifts the visible window when the pointer nears (or passes) its edge
-  // so the selection can be extended beyond what's currently on screen.
-  function panViewToward(rawRatio) {
-    const viewSpan = panelState.viewEnd - panelState.viewStart;
-    const margin = 0.08;
-    const r = clamp(rawRatio, -1, 2);
-    let shift = 0;
-    if (r < margin) {
-      shift = (r - margin) * viewSpan * 0.5;
-    } else if (r > 1 - margin) {
-      shift = (r - (1 - margin)) * viewSpan * 0.5;
-    }
-    if (shift === 0) return;
-    const newViewStart = clamp(panelState.viewStart + shift, 0, Math.max(0, panelState.duration - viewSpan));
-    panelState.viewStart = newViewStart;
-    panelState.viewEnd = newViewStart + viewSpan;
-  }
-
+  // Each piece is built and wired at most once (guarded by its own element existing),
+  // and re-attached (not re-created) on later calls. YouTube's own JS periodically
+  // rebuilds .ytp-right-controls' innerHTML, which can evict our fab; without these
+  // per-piece guards, that eviction made watchForVideoChanges rerun the whole builder
+  // and double-attach listeners on the surviving (never-evicted) track handles.
   function buildUI() {
-    if (document.getElementById("vc-fab")) return;
+    ensureFab();
+    ensurePanel();
+    buildTrackOverlay();
+  }
 
-    const fab = document.createElement("div");
+  function ensureFab() {
+    if (document.getElementById("vc-fab")) {
+      attachFab();
+      return;
+    }
+    const fab = document.createElement("button");
     fab.id = "vc-fab";
+    fab.className = "ytp-button";
     fab.title = "Creer un clip";
+    fab.setAttribute("aria-label", "Creer un clip");
     fab.textContent = "🎬";
-    document.body.appendChild(fab);
+    fab.addEventListener("click", () => togglePanel());
+    attachFab(fab);
+  }
+
+  function ensurePanel() {
+    if (document.getElementById("vc-panel")) return;
 
     const panel = document.createElement("div");
     panel.id = "vc-panel";
@@ -69,6 +63,7 @@
       </div>
       <div id="vc-duration" class="vc-duration">0s</div>
       <div class="vc-buttons">
+        <button id="vc-clear" class="vc-btn vc-btn-clear" title="Reinitialiser la selection">Reinitialiser</button>
         <button id="vc-preview" class="vc-btn">Apercu</button>
         <button id="vc-validate" class="vc-btn">Valider et telecharger</button>
       </div>
@@ -76,16 +71,10 @@
     `;
     document.body.appendChild(panel);
 
-    buildTrackOverlay();
-
-    fab.addEventListener("click", () => togglePanel());
     document.getElementById("vc-close").addEventListener("click", () => togglePanel(false));
+    document.getElementById("vc-clear").addEventListener("click", resetSelection);
     document.getElementById("vc-preview").addEventListener("click", onPreview);
     document.getElementById("vc-validate").addEventListener("click", onValidate);
-
-    setupDrag("vc-handle-start", "start");
-    setupDrag("vc-handle-end", "end");
-    setupRangeDrag();
 
     window.addEventListener("resize", positionTrackOverlay);
     document.addEventListener("fullscreenchange", positionTrackOverlay);
@@ -103,6 +92,13 @@
       <div id="vc-drag-tooltip"></div>
     `;
     attachTrackOverlay(wrap);
+
+    // Attached here (not in buildUI) so a later buildUI() call - e.g. after YouTube
+    // evicts the fab and watchForVideoChanges rebuilds it - never re-attaches these on
+    // the same, still-alive elements.
+    setupDrag("vc-handle-start", "start");
+    setupDrag("vc-handle-end", "end");
+    setupRangeDrag();
   }
 
   function attachTrackOverlay(wrap) {
@@ -114,18 +110,53 @@
     }
   }
 
+  // Slots the trigger button into YouTube's own right-side control cluster (next to
+  // settings/fullscreen), the way SponsorBlock and similar extensions do, instead of a
+  // floating button detached from the player.
+  function findRightControls() {
+    const player = findPlayerContainer();
+    return player ? player.querySelector(".ytp-right-controls") : null;
+  }
+
+  function attachFab(fab) {
+    const el = fab || document.getElementById("vc-fab");
+    if (!el) return;
+    const controls = findRightControls();
+    if (!controls) return;
+    if (el.parentElement !== controls) {
+      controls.insertBefore(el, controls.firstChild);
+    }
+  }
+
+  // Positions the track right above the icon row, in the same slot YouTube's own progress
+  // bar sits in (which we hide via setNativeProgressBarHidden() while the panel is open,
+  // so there's one bar, not two stacked). .ytp-chrome-bottom's own box is used rather than
+  // .ytp-progress-bar-container's, because YouTube collapses that container down to a
+  // thin line flush with the player's bottom edge while controls are auto-hidden - reading
+  // its rect at the wrong moment previously put our (taller) track right on top of the icon
+  // row once controls became visible again. .ytp-chrome-bottom's box stays stable across
+  // that hide/show transition.
   function positionTrackOverlay() {
     const wrap = document.getElementById("vc-track-wrap");
     const player = findPlayerContainer();
     if (!wrap || !player) return;
     const chromeBottom = player.querySelector(".ytp-chrome-bottom");
+    const playerRect = player.getBoundingClientRect();
     let bottomOffset = 52;
     if (chromeBottom) {
-      const playerRect = player.getBoundingClientRect();
       const chromeRect = chromeBottom.getBoundingClientRect();
       bottomOffset = Math.max(8, playerRect.bottom - chromeRect.top + 6);
     }
     wrap.style.bottom = `${bottomOffset}px`;
+  }
+
+  // Hides YouTube's own scrubber while we show our own, so there's a single bar in that
+  // slot instead of two stacked on top of each other.
+  function setNativeProgressBarHidden(hidden) {
+    const player = findPlayerContainer();
+    const progressBar = player ? player.querySelector(".ytp-progress-bar-container") : null;
+    if (!progressBar) return;
+    progressBar.style.display = hidden ? "none" : "";
   }
 
   function togglePanel(force) {
@@ -139,19 +170,19 @@
         setStatus("Video non prete, reessaie dans un instant.");
         return;
       }
-      attachTrackOverlay();
       const start = video.currentTime;
-      const end = Math.min(video.duration, start + Math.min(15, MAX_CLIP_SECONDS));
-      const view = computeInitialView(start, end, video.duration);
-      panelState = { start, end, duration: video.duration, viewStart: view.viewStart, viewEnd: view.viewEnd };
+      const end = Math.min(video.duration, start + Math.min(DEFAULT_CLIP_SECONDS, MAX_CLIP_SECONDS));
+      panelState = { start, end, duration: video.duration };
       panel.classList.add("vc-open");
       if (trackWrap) trackWrap.classList.add("vc-open");
       positionTrackOverlay();
+      setNativeProgressBarHidden(true);
       renderTimeline();
       setStatus("");
     } else {
       panel.classList.remove("vc-open");
       if (trackWrap) trackWrap.classList.remove("vc-open");
+      setNativeProgressBarHidden(false);
     }
   }
 
@@ -160,12 +191,16 @@
     if (el) el.textContent = text;
   }
 
+  // The track maps directly onto the video's full duration (0 to panelState.duration) -
+  // no zoomed/windowed view - so its proportions are always literally accurate, even
+  // though that means a short clip on a long video is a thin sliver rather than a
+  // comfortably wide target (the tradeoff was chosen deliberately over a zoomed view,
+  // which looked misleading once the track became a solid two-tone bar).
   function renderTimeline() {
     if (!panelState) return;
-    const { start, end, viewStart, viewEnd } = panelState;
-    const viewSpan = viewEnd - viewStart;
-    const startPct = clamp(((start - viewStart) / viewSpan) * 100, 0, 100);
-    const endPct = clamp(((end - viewStart) / viewSpan) * 100, 0, 100);
+    const { start, end, duration } = panelState;
+    const startPct = clamp((start / duration) * 100, 0, 100);
+    const endPct = clamp((end / duration) * 100, 0, 100);
 
     document.getElementById("vc-handle-start").style.left = `${startPct}%`;
     document.getElementById("vc-handle-end").style.left = `${endPct}%`;
@@ -204,12 +239,14 @@
       if (video && !video.paused) video.pause();
 
       const onMove = (moveEvent) => {
+        if (!panelState || !track.classList.contains("vc-open")) {
+          onUp(moveEvent);
+          return;
+        }
         const rect = track.getBoundingClientRect();
-        const rawRatio = (moveEvent.clientX - rect.left) / rect.width;
-        panViewToward(rawRatio);
-        const viewSpan = panelState.viewEnd - panelState.viewStart;
-        const ratio = clamp(rawRatio, 0, 1);
-        let time = panelState.viewStart + ratio * viewSpan;
+        if (!(rect.width > 0)) return;
+        const ratio = clamp((moveEvent.clientX - rect.left) / rect.width, 0, 1);
+        let time = ratio * panelState.duration;
 
         if (which === "start") {
           time = Math.min(time, panelState.end - 0.1);
@@ -228,87 +265,120 @@
         }
         renderTimeline();
         const shownTime = which === "start" ? panelState.start : panelState.end;
-        const leftPct = clamp(((shownTime - panelState.viewStart) / viewSpan) * 100, 0, 100);
+        const leftPct = clamp((shownTime / panelState.duration) * 100, 0, 100);
         showDragTooltip(leftPct, shownTime);
         if (video) video.currentTime = shownTime;
       };
 
       const onUp = (upEvent) => {
-        handle.releasePointerCapture(upEvent.pointerId);
+        try {
+          handle.releasePointerCapture(upEvent.pointerId);
+        } catch {
+          // pointer may already be released (e.g. capture lost mid-drag)
+        }
         handle.classList.remove("vc-dragging");
         hideDragTooltip();
         document.removeEventListener("pointermove", onMove);
         document.removeEventListener("pointerup", onUp);
+        document.removeEventListener("pointercancel", onUp);
       };
 
       document.addEventListener("pointermove", onMove);
       document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onUp);
     });
   }
 
+  // Dragging inside the highlighted range (between the two handles) slides the whole
+  // selection - both boundaries together, duration unchanged - along the video, the way
+  // you'd drag a trim window along a timeline. Keeps whatever point was under the pointer
+  // at pointerdown under the pointer as it moves.
   function setupRangeDrag() {
     const rangeEl = document.getElementById("vc-range");
+
     rangeEl.addEventListener("pointerdown", (e) => {
       e.preventDefault();
       e.stopPropagation();
       rangeEl.setPointerCapture(e.pointerId);
       const track = document.getElementById("vc-track-wrap");
-      const rect = track.getBoundingClientRect();
-      const startX = e.clientX;
-      const initial = { start: panelState.start, end: panelState.end };
-      const span = initial.end - initial.start;
       rangeEl.classList.add("vc-dragging");
       if (video && !video.paused) video.pause();
 
-      const viewSpan = panelState.viewEnd - panelState.viewStart;
+      const span = panelState.end - panelState.start;
+      const rect0 = track.getBoundingClientRect();
+      const ratio0 = rect0.width > 0 ? clamp((e.clientX - rect0.left) / rect0.width, 0, 1) : 0;
+      const grabTime = ratio0 * panelState.duration;
+      const offsetIntoSelection = clamp(grabTime - panelState.start, 0, span);
 
       const onMove = (moveEvent) => {
-        const deltaRatio = (moveEvent.clientX - startX) / rect.width;
-        const deltaTime = deltaRatio * viewSpan;
-        let newStart = initial.start + deltaTime;
-        let newEnd = initial.end + deltaTime;
-        if (newStart < 0) {
-          newStart = 0;
-          newEnd = span;
+        if (!panelState || !track.classList.contains("vc-open")) {
+          onUp(moveEvent);
+          return;
         }
-        if (newEnd > panelState.duration) {
-          newEnd = panelState.duration;
-          newStart = panelState.duration - span;
-        }
+        const rect = track.getBoundingClientRect();
+        if (!(rect.width > 0)) return;
+        const ratio = clamp((moveEvent.clientX - rect.left) / rect.width, 0, 1);
+        const pointerTime = ratio * panelState.duration;
+
+        let newStart = pointerTime - offsetIntoSelection;
+        newStart = clamp(newStart, 0, Math.max(0, panelState.duration - span));
         panelState.start = newStart;
-        panelState.end = newEnd;
+        panelState.end = newStart + span;
+
         renderTimeline();
-        const leftPct = clamp(((newStart - panelState.viewStart) / viewSpan) * 100, 0, 100);
+        const leftPct = clamp((newStart / panelState.duration) * 100, 0, 100);
         showDragTooltip(leftPct, newStart);
         if (video) video.currentTime = newStart;
       };
 
       const onUp = (upEvent) => {
-        rangeEl.releasePointerCapture(upEvent.pointerId);
+        try {
+          rangeEl.releasePointerCapture(upEvent.pointerId);
+        } catch {
+          // pointer may already be released (e.g. capture lost mid-drag)
+        }
         rangeEl.classList.remove("vc-dragging");
         hideDragTooltip();
         document.removeEventListener("pointermove", onMove);
         document.removeEventListener("pointerup", onUp);
+        document.removeEventListener("pointercancel", onUp);
       };
 
       document.addEventListener("pointermove", onMove);
       document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onUp);
     });
+  }
+
+  // Re-seeds a fresh default clip at the current playhead, for discarding a mistaken
+  // selection and starting over.
+  function resetSelection() {
+    if (!video || !panelState) return;
+    const start = clamp(video.currentTime, 0, panelState.duration);
+    const end = Math.min(panelState.duration, start + Math.min(DEFAULT_CLIP_SECONDS, MAX_CLIP_SECONDS));
+    panelState.start = start;
+    panelState.end = end;
+    renderTimeline();
+    setStatus("");
   }
 
   function onPreview() {
     if (!video || !panelState) return;
+    // Captured locally: playback continues asynchronously (timeupdate), and if the user
+    // navigates to a different video in the meantime, the module-level `video` is reset
+    // to null - this closure must keep using the element it actually started playing.
+    const v = video;
     const { start, end } = panelState;
-    video.currentTime = start;
-    video.play();
+    v.currentTime = start;
+    v.play();
 
     const onTimeUpdate = () => {
-      if (video.currentTime >= end) {
-        video.pause();
-        video.removeEventListener("timeupdate", onTimeUpdate);
+      if (v.currentTime >= end) {
+        v.pause();
+        v.removeEventListener("timeupdate", onTimeUpdate);
       }
     };
-    video.addEventListener("timeupdate", onTimeUpdate);
+    v.addEventListener("timeupdate", onTimeUpdate);
   }
 
   async function onValidate() {
@@ -318,6 +388,10 @@
       return;
     }
 
+    // Captured locally for the same reason as onPreview - this whole flow is async
+    // (recording runs in real time) and must not depend on the module-level `video`
+    // staying non-null for its duration.
+    const v = video;
     const { start, end } = panelState;
     const clipDuration = end - start;
     if (clipDuration <= 0.2) {
@@ -331,11 +405,11 @@
     validateBtn.disabled = true;
     previewBtn.disabled = true;
 
-    const wasPlaying = !video.paused;
-    const originalTime = video.currentTime;
+    const wasPlaying = !v.paused;
+    const originalTime = v.currentTime;
 
     try {
-      const stream = video.captureStream();
+      const stream = v.captureStream();
       const chunks = [];
       const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
         ? "video/webm;codecs=vp9,opus"
@@ -350,28 +424,28 @@
         recorder.onstop = resolve;
       });
 
-      if (Math.abs(video.currentTime - start) > 0.05) {
-        video.currentTime = start;
-        await waitForSeek(video);
+      if (Math.abs(v.currentTime - start) > 0.05) {
+        v.currentTime = start;
+        await waitForSeek(v);
       }
 
       recorder.start();
-      video.play();
+      v.play();
 
       const startTs = performance.now();
       await new Promise((resolve) => {
         const onTimeUpdate = () => {
           const elapsed = (performance.now() - startTs) / 1000;
           setStatus(`Enregistrement... ${Math.min(clipDuration, elapsed).toFixed(1)}s / ${clipDuration.toFixed(1)}s`);
-          if (video.currentTime >= end) {
-            video.removeEventListener("timeupdate", onTimeUpdate);
+          if (v.currentTime >= end) {
+            v.removeEventListener("timeupdate", onTimeUpdate);
             resolve();
           }
         };
-        video.addEventListener("timeupdate", onTimeUpdate);
+        v.addEventListener("timeupdate", onTimeUpdate);
       });
 
-      video.pause();
+      v.pause();
       recorder.stop();
       await recordingDone;
 
@@ -383,8 +457,8 @@
       console.error("Video Clipper error", err);
       setStatus("Erreur pendant l'enregistrement.");
     } finally {
-      video.currentTime = originalTime;
-      if (wasPlaying) video.play();
+      v.currentTime = originalTime;
+      if (wasPlaying) v.play();
       panelState.recording = false;
       validateBtn.disabled = false;
       previewBtn.disabled = false;
@@ -432,11 +506,8 @@
         togglePanel(false);
         video = null;
       }
-      if (!document.getElementById("vc-fab")) {
-        buildUI();
-      } else {
-        attachTrackOverlay();
-      }
+      buildUI();
+      attachTrackOverlay();
     }, 1000);
   }
 
