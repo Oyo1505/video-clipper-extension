@@ -22,11 +22,18 @@
   padding: 16px;
   font-family: "Roboto", Arial, sans-serif;
   font-size: 13px;
-  display: none;
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+  transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0.3s;
 }
 
 #vc-panel.vc-open {
-  display: block;
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  transition-delay: 0s;
 }
 
 #vc-panel h3 {
@@ -67,27 +74,61 @@
 }
 
 /* Sits above YouTube's native control bar, positioned dynamically by
-   positionTrackOverlay() since that bar's height varies with player size. Both zones
-   (kept vs. trimmed) fill the full height as solid blocks, editor-timeline style,
-   rather than a thin seekbar line - kept slim so it reads as a progress bar, not a
-   thick panel sitting on top of the video. */
+   positionTrackOverlay() since that bar's height varies with player size. Trim-bar
+   style: a frosted dark pill, a highlighted "kept" zone framed top and bottom, and
+   white pill handles with a grip. No overflow:hidden on the wrap so the drag tooltip
+   can sit above it; rounding is applied to the track and range individually. */
 #vc-track-wrap {
   position: absolute;
   left: 16px;
   right: 16px;
   bottom: 52px;
-  height: 18px;
+  height: 26px;
   z-index: 998000;
-  display: none;
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(8px);
   pointer-events: none;
-  border-radius: 3px;
-  overflow: hidden;
   touch-action: none;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0.35s;
 }
 
 #vc-track-wrap.vc-open {
-  display: block;
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  transition-delay: 0.08s, 0.08s, 0s;
+}
+
+/* Selection and handles glide into place when the view re-zooms after a drag, but
+   stay instant while dragging so they never lag behind the pointer. */
+#vc-track-wrap:not(:has(.vc-dragging)) #vc-range {
+  transition: left 0.4s cubic-bezier(0.22, 1, 0.36, 1), width 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.2s ease;
+}
+
+#vc-track-wrap:not(:has(.vc-dragging)) .vc-handle {
+  transition: left 0.4s cubic-bezier(0.22, 1, 0.36, 1), transform 0.2s ease, background 0.2s ease;
+}
+
+/* Entrance: the kept zone unfolds from its center, handles pop in just after. */
+#vc-track-wrap.vc-open #vc-range {
+  animation: vc-range-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.15s backwards;
+}
+
+#vc-track-wrap.vc-open .vc-handle {
+  animation: vc-handle-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s backwards;
+}
+
+@keyframes vc-range-in {
+  from { opacity: 0; clip-path: inset(0 50% 0 50%); }
+  to { opacity: 1; clip-path: inset(0 0 0 0); }
+}
+
+@keyframes vc-handle-in {
+  from { opacity: 0; scale: 0.4 0.6; }
+  to { opacity: 1; scale: 1 1; }
 }
 
 #vc-track-wrap .vc-handle {
@@ -97,14 +138,22 @@
 #vc-track {
   position: absolute;
   inset: 0;
-  background: #8f8f8f;
+  border-radius: 8px;
+  background: rgba(20, 20, 20, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
 }
 
 #vc-range {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: #e8d9ab;
+  background: linear-gradient(90deg, #7c3aed, #c026d3 55%, #ff3b6b);
+  border-top: 2px solid rgba(255, 255, 255, 0.95);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 14px rgba(192, 38, 211, 0.55);
+  box-sizing: border-box;
   pointer-events: auto;
   cursor: grab;
 }
@@ -116,22 +165,27 @@
   inset: 0;
 }
 
+#vc-range:hover {
+  filter: brightness(1.12);
+}
+
 #vc-range:active,
 #vc-range.vc-dragging {
   cursor: grabbing;
-  background: #f0e2ba;
+  filter: brightness(1.22);
 }
 
 .vc-handle {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 7px;
-  margin-left: -3.5px;
-  background: #3f72d1;
-  border-radius: 2px;
-  cursor: grab;
-  transition: background 0.12s ease;
+  top: -3px;
+  bottom: -3px;
+  width: 12px;
+  margin-left: -6px;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  cursor: ew-resize;
+  transition: transform 0.2s ease, background 0.2s ease;
 }
 
 .vc-handle::before {
@@ -146,27 +200,26 @@
 }
 
 .vc-handle::after {
-  /* grip texture: a column of small dots, like a resize/drag handle affordance */
+  /* grip: two thin vertical lines */
   content: "";
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 2px;
-  height: 8px;
+  width: 4px;
+  height: 12px;
   transform: translate(-50%, -50%);
-  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.85) 0.8px, transparent 0.8px);
-  background-size: 2px 3.5px;
-  background-repeat: repeat-y;
+  background: linear-gradient(90deg, #8a8a8a 1px, transparent 1px, transparent 3px, #8a8a8a 3px);
+  border-radius: 1px;
 }
 
 .vc-handle:hover {
-  background: #5686e0;
+  transform: scaleX(1.15);
 }
 
 .vc-handle:active,
 .vc-handle.vc-dragging {
-  cursor: grabbing;
-  background: #6a94e6;
+  background: #f5d9ff;
+  transform: scaleX(1.25);
 }
 
 #vc-drag-tooltip {
@@ -182,7 +235,7 @@
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.1s ease;
+  transition: opacity 0.18s ease;
   font-family: "Roboto", Arial, sans-serif;
 }
 
@@ -203,6 +256,11 @@
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease, opacity 0.2s ease;
+}
+
+.vc-btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 #vc-preview {
