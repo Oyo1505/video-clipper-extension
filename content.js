@@ -24,44 +24,6 @@
     return Math.min(max, Math.max(min, value));
   }
 
-  // While at rest the track maps 1:1 onto the whole video, so its proportions are always
-  // literally accurate. But on a long video a <=60s clip is then only a handful of
-  // pixels wide, too small to grab or drag precisely. dragView is a temporary "magnifier":
-  // set for the duration of an active handle/range drag only, discarded on release, so the
-  // resting view never lies about proportion but dragging still has room to work with.
-  let dragView = null;
-  const DRAG_VIEW_SPAN_FACTOR = 3;
-  const MIN_DRAG_VIEW_SPAN = 60;
-
-  function computeDragView(centerTime, duration) {
-    const span = Math.min(duration, Math.max(MIN_DRAG_VIEW_SPAN, MAX_CLIP_SECONDS * DRAG_VIEW_SPAN_FACTOR));
-    const start = clamp(centerTime - span / 2, 0, Math.max(0, duration - span));
-    return { start, end: Math.min(duration, start + span) };
-  }
-
-  function getRenderRange() {
-    if (dragView) return dragView;
-    return { start: 0, end: panelState ? panelState.duration : 1 };
-  }
-
-  // While dragging, shifts dragView when the pointer nears (or passes) its edge, so the
-  // selection can be moved/extended beyond what's currently magnified into view.
-  function panDragViewToward(rawRatio) {
-    if (!dragView || !panelState) return;
-    const span = dragView.end - dragView.start;
-    const margin = 0.08;
-    const r = clamp(rawRatio, -1, 2);
-    let shift = 0;
-    if (r < margin) {
-      shift = (r - margin) * span * 0.5;
-    } else if (r > 1 - margin) {
-      shift = (r - (1 - margin)) * span * 0.5;
-    }
-    if (shift === 0) return;
-    const newStart = clamp(dragView.start + shift, 0, Math.max(0, panelState.duration - span));
-    dragView = { start: newStart, end: newStart + span };
-  }
-
   // Each piece is built and wired at most once (guarded by its own element existing),
   // and re-attached (not re-created) on later calls. YouTube's own JS periodically
   // rebuilds .ytp-right-controls' innerHTML, which can evict our fab; without these
@@ -229,15 +191,16 @@
     if (el) el.textContent = text;
   }
 
-  // Maps onto getRenderRange(): the whole video at rest (accurate proportions), or a
-  // magnified dragView while a handle/the range is actively being dragged (see above).
+  // The track maps directly onto the video's full duration (0 to panelState.duration) -
+  // no zoomed/windowed view - so its proportions are always literally accurate, even
+  // though that means a short clip on a long video is a thin sliver rather than a
+  // comfortably wide target (the tradeoff was chosen deliberately over a zoomed view,
+  // which looked misleading once the track became a solid two-tone bar).
   function renderTimeline() {
     if (!panelState) return;
-    const { start, end } = panelState;
-    const range = getRenderRange();
-    const rangeSpan = range.end - range.start;
-    const startPct = clamp(((start - range.start) / rangeSpan) * 100, 0, 100);
-    const endPct = clamp(((end - range.start) / rangeSpan) * 100, 0, 100);
+    const { start, end, duration } = panelState;
+    const startPct = clamp((start / duration) * 100, 0, 100);
+    const endPct = clamp((end / duration) * 100, 0, 100);
 
     document.getElementById("vc-handle-start").style.left = `${startPct}%`;
     document.getElementById("vc-handle-end").style.left = `${endPct}%`;
@@ -274,8 +237,6 @@
       const track = document.getElementById("vc-track-wrap");
       handle.classList.add("vc-dragging");
       if (video && !video.paused) video.pause();
-      dragView = computeDragView(which === "start" ? panelState.start : panelState.end, panelState.duration);
-      renderTimeline();
 
       const onMove = (moveEvent) => {
         if (!panelState || !track.classList.contains("vc-open")) {
@@ -284,11 +245,8 @@
         }
         const rect = track.getBoundingClientRect();
         if (!(rect.width > 0)) return;
-        const rawRatio = (moveEvent.clientX - rect.left) / rect.width;
-        panDragViewToward(rawRatio);
-        const range = getRenderRange();
-        const ratio = clamp(rawRatio, 0, 1);
-        let time = range.start + ratio * (range.end - range.start);
+        const ratio = clamp((moveEvent.clientX - rect.left) / rect.width, 0, 1);
+        let time = ratio * panelState.duration;
 
         if (which === "start") {
           time = Math.min(time, panelState.end - 0.1);
@@ -307,8 +265,7 @@
         }
         renderTimeline();
         const shownTime = which === "start" ? panelState.start : panelState.end;
-        const rangeNow = getRenderRange();
-        const leftPct = clamp(((shownTime - rangeNow.start) / (rangeNow.end - rangeNow.start)) * 100, 0, 100);
+        const leftPct = clamp((shownTime / panelState.duration) * 100, 0, 100);
         showDragTooltip(leftPct, shownTime);
         if (video) video.currentTime = shownTime;
       };
@@ -321,8 +278,6 @@
         }
         handle.classList.remove("vc-dragging");
         hideDragTooltip();
-        dragView = null;
-        renderTimeline();
         document.removeEventListener("pointermove", onMove);
         document.removeEventListener("pointerup", onUp);
         document.removeEventListener("pointercancel", onUp);
@@ -354,8 +309,6 @@
       const ratio0 = rect0.width > 0 ? clamp((e.clientX - rect0.left) / rect0.width, 0, 1) : 0;
       const grabTime = ratio0 * panelState.duration;
       const offsetIntoSelection = clamp(grabTime - panelState.start, 0, span);
-      dragView = computeDragView((panelState.start + panelState.end) / 2, panelState.duration);
-      renderTimeline();
 
       const onMove = (moveEvent) => {
         if (!panelState || !track.classList.contains("vc-open")) {
@@ -364,11 +317,8 @@
         }
         const rect = track.getBoundingClientRect();
         if (!(rect.width > 0)) return;
-        const rawRatio = (moveEvent.clientX - rect.left) / rect.width;
-        panDragViewToward(rawRatio);
-        const range = getRenderRange();
-        const ratio = clamp(rawRatio, 0, 1);
-        const pointerTime = range.start + ratio * (range.end - range.start);
+        const ratio = clamp((moveEvent.clientX - rect.left) / rect.width, 0, 1);
+        const pointerTime = ratio * panelState.duration;
 
         let newStart = pointerTime - offsetIntoSelection;
         newStart = clamp(newStart, 0, Math.max(0, panelState.duration - span));
@@ -376,8 +326,7 @@
         panelState.end = newStart + span;
 
         renderTimeline();
-        const rangeNow = getRenderRange();
-        const leftPct = clamp(((newStart - rangeNow.start) / (rangeNow.end - rangeNow.start)) * 100, 0, 100);
+        const leftPct = clamp((newStart / panelState.duration) * 100, 0, 100);
         showDragTooltip(leftPct, newStart);
         if (video) video.currentTime = newStart;
       };
@@ -390,8 +339,6 @@
         }
         rangeEl.classList.remove("vc-dragging");
         hideDragTooltip();
-        dragView = null;
-        renderTimeline();
         document.removeEventListener("pointermove", onMove);
         document.removeEventListener("pointerup", onUp);
         document.removeEventListener("pointercancel", onUp);
