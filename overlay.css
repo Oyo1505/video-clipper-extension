@@ -15,10 +15,14 @@
   bottom: 24px;
   right: 24px;
   width: 360px;
-  background: #1f1f1f;
+  /* frosted glass, same look as the trim track */
+  background: rgba(24, 24, 28, 0.55);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   color: #fff;
-  border-radius: 12px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   padding: 16px;
   font-family: "Roboto", Arial, sans-serif;
   font-size: 13px;
@@ -154,6 +158,7 @@
   border-bottom: 2px solid rgba(255, 255, 255, 0.95);
   box-shadow: 0 0 14px rgba(192, 38, 211, 0.55);
   box-sizing: border-box;
+  min-width: 8px;
   pointer-events: auto;
   cursor: grab;
 }
@@ -179,10 +184,8 @@
   position: absolute;
   top: -3px;
   bottom: -3px;
-  width: 12px;
-  margin-left: -6px;
+  width: 10px;
   background: #fff;
-  border-radius: 6px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
   cursor: ew-resize;
   transition: transform 0.2s ease, background 0.2s ease;
@@ -194,9 +197,31 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 50%;
-  width: 26px;
-  transform: translateX(-50%);
+  /* extends outward only, so a narrow selection keeps its own grab area between
+     the handles instead of being fully covered by them */
+  left: -8px;
+  right: -8px;
+}
+
+/* Handles sit just outside the selection edges rather than centered on them. */
+#vc-handle-start {
+  margin-left: -10px;
+  border-radius: 6px 0 0 6px;
+  transform-origin: right center;
+}
+
+#vc-handle-end {
+  margin-left: 0;
+  border-radius: 0 6px 6px 0;
+  transform-origin: left center;
+}
+
+#vc-handle-start::before {
+  right: 0;
+}
+
+#vc-handle-end::before {
+  left: 0;
 }
 
 .vc-handle::after {
@@ -264,12 +289,12 @@
 }
 
 #vc-preview {
-  background: #333;
+  background: rgba(255, 255, 255, 0.12);
   color: #fff;
 }
 
 #vc-preview:hover {
-  background: #444;
+  background: rgba(255, 255, 255, 0.22);
 }
 
 #vc-validate {
@@ -289,12 +314,12 @@
 
 .vc-btn-clear {
   flex: 0 0 auto;
-  background: #333;
+  background: rgba(255, 255, 255, 0.08);
   color: #ccc;
 }
 
 .vc-btn-clear:hover {
-  background: #444;
+  background: rgba(255, 255, 255, 0.18);
   color: #fff;
 }
 
@@ -303,4 +328,119 @@
   min-height: 16px;
   color: #ccc;
   text-align: center;
+}
+
+#vc-donate {
+  display: block;
+  margin-top: 8px;
+  color: #999;
+  font-size: 11px;
+  text-align: center;
+  text-decoration: none;
+}
+
+#vc-donate:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+/* Long videos: mark-from-player controls (hidden on short ones). */
+#vc-marks {
+  display: none;
+  margin-bottom: 12px;
+}
+
+#vc-panel.vc-long #vc-marks {
+  display: block;
+}
+
+.vc-hint {
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: #888;
+}
+
+.vc-mark-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.vc-mini {
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  min-width: 34px;
+  height: 28px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.vc-mini:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.vc-mini:active {
+  transform: scale(0.95);
+}
+
+.vc-mini-text {
+  flex: 1;
+  background: #7c3aed;
+  font-weight: 600;
+}
+
+.vc-mini-text:hover {
+  background: #8b5cf6;
+}
+
+.vc-mark-here[data-which="start"] {
+  background: #16a34a;
+}
+
+.vc-mark-here[data-which="start"]:hover {
+  background: #22c55e;
+}
+
+.vc-mark-here[data-which="end"] {
+  background: #e5484d;
+}
+
+.vc-mark-here[data-which="end"]:hover {
+  background: #f2686c;
+}
+
+/* Narrow selection (long video): slimmer handles with a small outward-only grab area and
+   no grip, and a wider minimum range, so the range itself stays grabbable. */
+#vc-track-wrap.vc-narrow .vc-handle {
+  width: 5px;
+}
+
+#vc-track-wrap.vc-narrow #vc-handle-start {
+  margin-left: -5px;
+}
+
+#vc-track-wrap.vc-narrow .vc-handle::before {
+  left: -4px;
+  right: -4px;
+}
+
+#vc-track-wrap.vc-narrow #vc-handle-start::before {
+  right: 0;
+}
+
+#vc-track-wrap.vc-narrow #vc-handle-end::before {
+  left: 0;
+}
+
+#vc-track-wrap.vc-narrow .vc-handle::after {
+  display: none;
+}
+
+#vc-track-wrap.vc-narrow .vc-handle:hover,
+#vc-track-wrap.vc-narrow .vc-handle:active,
+#vc-track-wrap.vc-narrow .vc-handle.vc-dragging {
+  transform: none;
 }

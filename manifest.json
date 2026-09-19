@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Video Clipper",
-  "version": "0.1.0",
-  "description": "Decoupe un extrait (max 60s) d'une video YouTube et le telecharge en WebM.",
+  "version": "0.2.0",
+  "description": "Cut a clip (max 60s) from a YouTube video and download it as WebM.",
   "permissions": [],
   "host_permissions": [
     "*://*.youtube.com/*"
@@ -10,7 +10,25 @@
   "content_scripts": [
     {
       "matches": ["*://*.youtube.com/watch*"],
-      "js": ["content.js"],
+      "js": [
+        "src/constants.js",
+        "src/util.js",
+        "src/dom.js",
+        "src/state.js",
+        "src/selection.js",
+        "src/drag.js",
+        "src/track.js",
+        "src/panel.js",
+        "src/view.js",
+        "src/marks.js",
+        "src/preview.js",
+        "src/recorder.js",
+        "src/download.js",
+        "src/exporter.js",
+        "src/shortcuts.js",
+        "src/fab.js",
+        "src/content.js"
+      ],
       "css": ["overlay.css"],
       "run_at": "document_idle"
     }

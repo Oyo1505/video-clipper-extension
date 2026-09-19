@@ -6,22 +6,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Manifest V3 Chrome/Edge extension (`Video Clipper`, prototype, v0.1.0) that lets a user cut a
 ≤60s clip out of a YouTube video that's currently playing and download it as WebM. No build step,
-no dependencies, no package.json — three flat files loaded directly as an unpacked extension:
+no dependencies, no package.json — plain files loaded directly as an unpacked extension:
 
 - `manifest.json` — MV3 manifest. Content script matches only `*://*.youtube.com/watch*`, no
   `permissions`, only `host_permissions` for youtube.com. No background/service worker, no popup.
-- `content.js` — the entire extension, a single IIFE injected into the YouTube watch page.
+  **It lists every `src/*.js` file in load order** — a new file must be added there.
+- `src/*.js` — the extension, split by responsibility (see Architecture).
 - `overlay.css` — styling for the injected UI.
 
 ## Development workflow
 
-There's no build/lint/test tooling — edit `content.js`/`overlay.css` directly, then:
+There's no build/lint/test tooling — edit `src/*.js`/`overlay.css` directly, then:
 
 1. `chrome://extensions` (or `edge://extensions`) → enable "Mode développeur".
 2. "Charger l'extension non empaquetée" → select this folder (first load), or hit the reload
    icon on the extension's card after edits.
 3. Reload any already-open `youtube.com/watch?v=...` tab to reinject the updated content script
    (reloading the extension alone does not touch already-open tabs).
+4. `scripts/package.ps1` zips manifest + `src/` + css + icons into `dist/` for the store.
 
 For automated testing during development, this repo has `.mcp.json` configured with the
 `chrome-devtools` MCP server (`chrome-devtools-mcp`, `--autoConnect`), which can drive a real
@@ -30,6 +32,29 @@ useful since there's no headless test suite. `--autoConnect` requires remote deb
 the target Chrome via `chrome://inspect/#remote-debugging`.
 
 ## Architecture
+
+### Modules and load order
+
+Content-script files can't use `import`/`export` (classic scripts), so they share one namespace,
+`globalThis.VC`, in the isolated world (invisible to the YouTube page). Each file is an IIFE that
+publishes a frozen object (`VC.selection`, `VC.panel`, ...). Load order (in `manifest.json`):
+
+| File | Role |
+|---|---|
+| `constants.js` | `VC.config` (all tunables, no magic numbers) and `VC.messages` (UI strings) |
+| `util.js` | `clamp`, `formatTime`, `safePlay` |
+| `dom.js` | Lookups into YouTube's DOM (selectors live here only) |
+| `state.js` | The only mutable state: `VC.state = { video, clip, isRecording }` |
+| `selection.js` | **Pure** selection rules (`setBound`, `markAt`, `nudge`, `slideTo`); return new clips |
+| `drag.js` / `track.js` | Pointer dragging / the track overlay (render, position, tooltip) |
+| `panel.js` / `view.js` | Control panel; `view.refresh()` redraws track + panel from `state.clip` |
+| `marks.js` / `preview.js` | Mark-at-playhead, nudge, reset / preview playback |
+| `recorder.js` / `download.js` / `exporter.js` | Real-time recording (UI-agnostic) / file save / export flow |
+| `shortcuts.js` / `fab.js` | I/O keys / the 🎬 trigger button |
+| `content.js` | Entry point: mounts the UI and polls for navigation |
+
+Only depend on modules loaded **earlier** at file top level (`const { x } = VC.y`); references to
+later modules (e.g. `VC.track` from `drag.js`) must happen inside functions, at call time.
 
 ### Capture strategy (why it's built this way)
 
@@ -41,45 +66,42 @@ Known limits: doesn't work on DRM/Widevine content, output is WebM only (no MP4 
 
 ### Injected UI is idempotent, because YouTube's own JS fights back
 
-`buildUI()` (called every 1s by `watchForVideoChanges()`'s polling loop, since YouTube is an SPA
-with no reliable single mount point) delegates to three independently-guarded builders:
+`mountUi()` (`content.js`) runs every 1s from a polling loop, since YouTube is an SPA with no
+reliable single mount point. It calls three independently-guarded builders:
 
-- `ensureFab()` — the 🎬 trigger button. It's inserted *inside* YouTube's own
-  `.ytp-right-controls` cluster (same integration point extensions like SponsorBlock use), not a
-  floating page element. YouTube periodically rewrites `.ytp-right-controls`' innerHTML, which can
-  evict this button from the DOM — `ensureFab()` detects that (`getElementById` returns null) and
-  re-creates it.
-- `ensurePanel()` — the floating control panel (labels/duration/buttons), appended to
-  `document.body`, fixed-positioned bottom-right.
-- `buildTrackOverlay()` — the draggable clip-range track, appended as a child of the player
-  container (`#movie_player`), positioned above the native control bar height (measured live in
-  `positionTrackOverlay()`, since that height varies with player size/theater/fullscreen).
+- `fab.ensure()` — the 🎬 button, inserted *inside* YouTube's `.ytp-right-controls` cluster (same
+  integration point as SponsorBlock). YouTube periodically rewrites that innerHTML, evicting the
+  button; `ensure()` re-attaches or re-creates it.
+- `panel.build()` — the floating control panel, appended to `document.body`.
+- `track.build()` — the clip-range track, a child of the player container (`#movie_player`),
+  positioned above the native control bar (measured live in `track.position()`).
 
-**Each of these bails out early if its root element already exists**, and `setupDrag()` /
-`setupRangeDrag()` are wired *only* inside `buildTrackOverlay()`'s creation branch — deliberately
-not in `buildUI()` itself. If the fab gets evicted and rebuilt but the track/handles are wired
-again elsewhere, event listeners double up on the same (never-evicted) handle elements, causing
-duplicated/erratic drag behavior. When adding new injected UI, follow the same pattern: guard by
-existence, wire interaction handlers only in the branch that creates the element.
+**Each bails out (only re-attaching if needed) when its root element already exists**, and event
+listeners are wired *only* in the branch that creates the element (`drag.install()`, resize and
+fullscreen listeners in `track.build()`). Wiring them on every call would stack duplicate handlers
+on the same never-evicted elements. Global listeners (`shortcuts.install()`) are installed once
+from `content.js`. When adding injected UI, follow the same pattern.
 
-### Timeline is a zoomed window, not the full video duration
+### Timeline maps the full video duration
 
-The draggable track never maps to the full video length — for a long video, a ≤60s clip would be
-a few unusable pixels wide. Instead `computeView()` sizes a viewport around the current selection
-(`VIEW_PADDING_FACTOR = 1.6`× the clip span, `MIN_VIEW_SPAN = 20`s floor), so the selected range
-always reads as roughly the same proportion of the track regardless of absolute video length.
+The track maps 0 → `clip.duration` linearly, so its proportions are literally accurate (an earlier
+zoomed-window design looked misleading and was dropped). On long videos the clip is a sliver, so
+`track.js` widens only the *drawing* to `MIN_RANGE_PX` (`vc-narrow` class); drags read the real
+pointer position and labels show true times.
 
-- On panel open and after every drag ends, `rezoomView()` recomputes and recenters this window.
-- During an active drag, the window itself stays fixed for stability, but `panViewToward()`
-  auto-pans it when the pointer nears/passes the track edge, so a selection can be extended past
-  what's currently visible.
-- `panelState.{viewStart,viewEnd}` (the window) is distinct from `panelState.{start,end}` (the
-  actual clip selection, in absolute video seconds) — don't conflate them when reading/writing
-  handle positions (`style.left` is always a % of the *view* window, not the video duration).
+### Long videos (>= 30 min): marking from the player
+
+From `LONG_VIDEO_SECONDS` (`selection.isLongVideo()`) the panel shows "Start here" / "End here" buttons
+and capture-phase I / O keys (overriding YouTube's "i" miniplayer shortcut while the panel is
+open), plus -5/-1/+1/+5s nudges.
 
 ### State
 
-`panelState` (start/end/duration/viewStart/viewEnd/recording) is the single source of truth,
-created on panel open and `null` until then. `MAX_CLIP_SECONDS = 60` is enforced in both the
-single-handle drag math (`setupDrag`) and the whole-selection drag math (`setupRangeDrag`) —
-change both if that cap ever changes.
+`VC.state.clip` (`{ start, end, duration }` in absolute video seconds) is the single source of
+truth for the selection, `null` while the panel is closed (so `clip !== null` means "open"). It is
+treated as immutable: always replace it with the result of a `selection.*` function, then call
+`VC.view.refresh()`. **`MAX_CLIP_SECONDS` is enforced in one place, `selection.setBound()`**, which
+handle drags, marks and nudges all go through (`slideTo` preserves the span, so it can't exceed it).
+
+Async flows (`preview.js`, `exporter.js`) copy `state.video`/`state.clip` into locals first: the
+user can navigate away mid-recording, which resets the module-level state.
