@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Video Clipper",
+  "name": "QuickClip",
   "version": "0.2.0",
   "description": "Cut a clip (max 60s) from a YouTube video and download it as WebM.",
   "permissions": [],
@@ -39,7 +39,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "Video Clipper",
+    "default_title": "QuickClip",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png"

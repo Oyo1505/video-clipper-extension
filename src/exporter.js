@@ -37,7 +37,7 @@
       VC.download.saveBlob(blob);
       VC.panel.setStatus(messages.downloaded);
     } catch (error) {
-      console.error("Video Clipper error", error);
+      console.error("QuickClip error", error);
       VC.panel.setStatus(messages.recordingError);
     } finally {
       video.currentTime = originalTime;

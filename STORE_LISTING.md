@@ -1,13 +1,13 @@
 # Fiche Chrome Web Store
 
 ## Nom
-Video Clipper
+QuickClip
 
 ## Description courte (max 132 caractères)
 Découpez un extrait (60 s max) d'une vidéo pendant sa lecture et enregistrez-le en WebM, grâce à une barre de découpe intégrée au lecteur.
 
 ## Description détaillée
-Video Clipper ajoute un bouton dans la barre de contrôle du lecteur vidéo, ainsi qu'une barre de découpe superposée à la barre de progression.
+QuickClip ajoute un bouton dans la barre de contrôle du lecteur vidéo, ainsi qu'une barre de découpe superposée à la barre de progression.
 
 - Réglez le début et la fin de l'extrait en faisant glisser les poignées.
 - Durée maximale : 60 secondes.
