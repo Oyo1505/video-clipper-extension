@@ -1,4 +1,4 @@
-# Politique de confidentialité — QuickClip
+# Politique de confidentialité — QuickClip for Video
 
 QuickClip ne collecte, ne stocke et ne transmet aucune donnée personnelle.
 

@@ -1,7 +1,7 @@
 # Fiche Chrome Web Store
 
 ## Nom
-QuickClip
+QuickClip for Video
 
 ## Description courte (max 132 caractères)
 Découpez un extrait (60 s max) d'une vidéo pendant sa lecture et enregistrez-le en WebM, grâce à une barre de découpe intégrée au lecteur.

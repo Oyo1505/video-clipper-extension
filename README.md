@@ -1,4 +1,4 @@
-# QuickClip (prototype)
+# QuickClip for Video (prototype)
 
 Extension Chrome/Edge (Manifest V3) qui permet de decouper un extrait (max 60s)
 d'une video YouTube en cours de lecture et de le telecharger en WebM dans le

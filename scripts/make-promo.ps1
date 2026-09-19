@@ -30,9 +30,9 @@ $pts = @((New-Object System.Drawing.PointF ($ix+$is*0.38),($iy+$is*0.28)),(New-O
 $g.FillPolygon([System.Drawing.Brushes]::White,$pts)
 
 # Text
-$title = New-Object System.Drawing.Font 'Segoe UI',34,([System.Drawing.FontStyle]::Bold),([System.Drawing.GraphicsUnit]::Pixel)
+$title = New-Object System.Drawing.Font 'Segoe UI',26,([System.Drawing.FontStyle]::Bold),([System.Drawing.GraphicsUnit]::Pixel)
 $sub = New-Object System.Drawing.Font 'Segoe UI',17,([System.Drawing.FontStyle]::Regular),([System.Drawing.GraphicsUnit]::Pixel)
-$g.DrawString('QuickClip',$title,[System.Drawing.Brushes]::White,($ix+$is+16),($iy+2))
+$g.DrawString('QuickClip for Video',$title,[System.Drawing.Brushes]::White,($ix+$is+16),($iy+2))
 $soft = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255,203,225,240))
 $g.DrawString('Clip up to 60 s in seconds',$sub,$soft,($ix+$is+18),($iy+46))
 $g.DrawString('Trim right on the player, save as WebM.',$sub,$soft,$ix,150)

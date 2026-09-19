@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Manifest V3 Chrome/Edge extension (`QuickClip`, prototype, v0.1.0) that lets a user cut a
+A Manifest V3 Chrome/Edge extension (`QuickClip for Video`, prototype, v0.1.0) that lets a user cut a
 ≤60s clip out of a YouTube video that's currently playing and download it as WebM. No build step,
 no dependencies, no package.json — plain files loaded directly as an unpacked extension:
 
