@@ -330,16 +330,20 @@
   text-align: center;
 }
 
-#vc-donate {
-  display: block;
+.vc-footer {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
   margin-top: 8px;
+}
+
+.vc-footer a {
   color: #999;
   font-size: 11px;
-  text-align: center;
   text-decoration: none;
 }
 
-#vc-donate:hover {
+.vc-footer a:hover {
   color: #fff;
   text-decoration: underline;
 }

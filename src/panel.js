@@ -44,7 +44,10 @@
         <button id="vc-validate" class="vc-btn">Confirm and download</button>
       </div>
       <div id="${STATUS_ID}"></div>
-      <a id="vc-donate" href="${VC.donationUrl}" target="_blank" rel="noopener noreferrer">☕ Support this project</a>
+      <div class="vc-footer">
+        <a href="${VC.bugReportUrl}" target="_blank" rel="noopener noreferrer">🐞 Report a bug</a>
+        <a href="${VC.donationUrl}" target="_blank" rel="noopener noreferrer">☕ Support this project</a>
+      </div>
     `;
     return panel;
   }

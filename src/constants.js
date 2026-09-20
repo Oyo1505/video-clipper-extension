@@ -34,6 +34,7 @@ VC.config = Object.freeze({
 });
 
 VC.donationUrl = "https://paypal.me/HRIGOULET";
+VC.bugReportUrl = "https://github.com/Oyo1505/video-clipper-extension/issues/new";
 
 VC.messages = Object.freeze({
   videoNotReady: "Video not ready, try again in a moment.",
