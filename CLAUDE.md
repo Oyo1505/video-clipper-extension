@@ -8,7 +8,7 @@ A Manifest V3 Chrome/Edge extension (`QuickClip for Video`, prototype, v0.1.0) t
 ≤60s clip out of a YouTube video that's currently playing and download it as WebM. No build step,
 no dependencies, no package.json — plain files loaded directly as an unpacked extension:
 
-- `manifest.json` — MV3 manifest. Content script matches only `*://*.youtube.com/watch*`, no
+- `manifest.json` — MV3 manifest. Content script matches all of `*://*.youtube.com/*` (match patterns are only evaluated on full page loads, so `/watch*` would miss SPA navigation; `content.js` gates mounting on `/watch`), no
   `permissions`, only `host_permissions` for youtube.com. No background/service worker, no popup.
   **It lists every `src/*.js` file in load order** — a new file must be added there.
 - `src/*.js` — the extension, split by responsibility (see Architecture).

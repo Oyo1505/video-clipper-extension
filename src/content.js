@@ -4,7 +4,13 @@
   const { state } = VC;
   const { POLL_INTERVAL_MS } = VC.config;
 
+  // The content script is injected on every YouTube page, because match patterns are only
+  // evaluated on full page loads: arriving on a video via YouTube's SPA navigation (from
+  // the home page, search...) would otherwise never inject anything.
+  const isWatchPage = () => location.pathname === "/watch";
+
   function mountUi() {
+    if (!isWatchPage()) return;
     VC.fab.ensure();
     VC.panel.build();
     VC.track.build();
