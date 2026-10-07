@@ -28,6 +28,15 @@
     }, POLL_INTERVAL_MS);
   }
 
+  // When the extension is reloaded or auto-updated, the previous instance's UI stays in
+  // the page with dead listeners, and the idempotent builders would adopt it as-is.
+  function removeStaleUi() {
+    for (const id of ["vc-fab", "vc-panel", "vc-track-wrap", "vc-layer"]) {
+      document.getElementById(id)?.remove();
+    }
+  }
+
+  removeStaleUi();
   VC.shortcuts.install();
   mountUi();
   watchForNavigation();

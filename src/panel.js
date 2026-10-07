@@ -1,7 +1,7 @@
 // The floating control panel (times, mark/nudge buttons, preview/export).
 (() => {
   const { state, dom, selection, messages } = VC;
-  const { formatTime } = VC.util;
+  const { formatTime, safePlay } = VC.util;
   const { NUDGE_STEPS, MAX_CLIP_SECONDS } = VC.config;
 
   const PANEL_ID = "vc-panel";
@@ -97,10 +97,19 @@
     durationEl.classList.toggle("vc-warn", span >= MAX_CLIP_SECONDS - 0.05);
   }
 
+  const hasDuration = (video) => Number.isFinite(video.duration) && video.duration > 0;
+
   function open() {
     const video = dom.findVideo();
-    if (!video || !Number.isFinite(video.duration) || video.duration <= 0) {
+    if (!video) {
       setStatus(messages.videoNotReady);
+      return;
+    }
+    // The mobile site only loads a video once it is played, and a status line in the
+    // still-closed panel would go unseen: start it and open once its length is known.
+    if (!hasDuration(video)) {
+      video.addEventListener("loadedmetadata", open, { once: true });
+      safePlay(video);
       return;
     }
     state.video = video;
