@@ -93,7 +93,7 @@
 
   // YouTube can re-create the player container, so the track is re-parented, not rebuilt.
   function attach(wrap) {
-    const parent = dom.findPlayer() ?? document.body;
+    const parent = VC.layer.host() ?? document.body;
     if (wrap.parentElement !== parent) parent.appendChild(wrap);
   }
 
@@ -130,6 +130,8 @@
       endHandleEl: dom.byId(END_HANDLE_ID),
       rangeEl: dom.byId(RANGE_ID),
     });
+    VC.pinch.install(wrap);
+    dom.isolateFromPlayer(wrap);
     window.addEventListener("resize", position);
     document.addEventListener("fullscreenchange", position);
   }

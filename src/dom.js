@@ -3,6 +3,9 @@
 (() => {
   const byId = (id) => document.getElementById(id);
 
+  // m.youtube.com (served to phones, e.g. Firefox for Android) has a different player DOM.
+  const isMobileSite = () => location.hostname === "m.youtube.com";
+
   function findVideo() {
     return document.querySelector("video.html5-main-video") || document.querySelector("video");
   }
@@ -32,12 +35,23 @@
     if (progressBar) progressBar.style.display = hidden ? "none" : "";
   }
 
+  // Keeps taps on our UI inside the player from also reaching the mobile player, which
+  // would toggle its controls overlay or pause the video. Call once per element.
+  function isolateFromPlayer(el) {
+    if (!isMobileSite()) return;
+    for (const type of ["click", "pointerdown", "touchstart", "touchend", "mousedown", "mouseup"]) {
+      el.addEventListener(type, (event) => event.stopPropagation());
+    }
+  }
+
   VC.dom = Object.freeze({
     byId,
+    isMobileSite,
     findVideo,
     findPlayer,
     findRightControls,
     findControlBar,
     setNativeProgressBarHidden,
+    isolateFromPlayer,
   });
 })();

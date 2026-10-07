@@ -17,6 +17,9 @@ VC.config = Object.freeze({
   NARROW_RANGE_PX: 40,
   MIN_RANGE_PX: 16,
   NUDGE_STEPS: Object.freeze([-5, -1, 1, 5]),
+  // Floor on the finger gap in a pinch, so fingers landing almost together can't make
+  // the selection jump on the first move.
+  MIN_PINCH_DISTANCE_PX: 24,
 
   // Native control bar spacing, used to sit the track right above it.
   FALLBACK_BOTTOM_OFFSET_PX: 52,

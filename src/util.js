@@ -18,5 +18,14 @@
     video.play()?.catch(() => {});
   }
 
-  VC.util = Object.freeze({ clamp, formatTime, safePlay });
+  // Firefox (desktop and Android) only exposes the prefixed mozCaptureStream().
+  const captureFnOf = (video) => video.captureStream ?? video.mozCaptureStream;
+
+  const canCaptureStream = (video) => typeof captureFnOf(video) === "function";
+
+  function captureStreamOf(video) {
+    return captureFnOf(video).call(video);
+  }
+
+  VC.util = Object.freeze({ clamp, formatTime, safePlay, canCaptureStream, captureStreamOf });
 })();

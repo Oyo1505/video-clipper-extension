@@ -33,11 +33,16 @@
       el.classList.add("vc-dragging");
       state.video?.pause();
 
+      // Once a second finger turns this into a pinch, the drag stays out of it until its
+      // finger lifts, so the remaining finger doesn't yank the handle when the other lifts.
+      let pinched = false;
       const onMove = (moveEvent) => {
         if (!state.clip) {
           onUp(moveEvent);
           return;
         }
+        pinched ||= VC.pinch.isActive();
+        if (pinched) return;
         const pointerTime = timeAtPointer(trackEl, moveEvent.clientX);
         if (pointerTime === null) return;
         const shownTime = moveTo(pointerTime);

@@ -448,3 +448,70 @@
 #vc-track-wrap.vc-narrow .vc-handle.vc-dragging {
   transform: none;
 }
+
+/* Mobile site (m.youtube.com, e.g. Firefox for Android): no native control cluster to
+   slot into, so the trigger floats in the player's top-left corner. */
+#vc-fab.vc-fab-floating {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 998001;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  background: rgba(20, 20, 20, 0.6);
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+/* Phones: the panel spans the screen width instead of a fixed 360px card. */
+@media (max-width: 480px) {
+  #vc-panel {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    padding: 12px;
+  }
+
+  .vc-btn {
+    padding: 10px 8px;
+  }
+}
+
+/* Touch screens: a taller track and wider grab areas for fingers. */
+@media (pointer: coarse) {
+  #vc-track-wrap {
+    height: 32px;
+  }
+
+  /* The whole bar takes touches, so the second finger of a pinch (src/pinch.js) can
+     land anywhere on it, not just on the selection. */
+  #vc-track {
+    pointer-events: auto;
+  }
+
+  .vc-handle::before {
+    left: -16px;
+    right: -16px;
+  }
+
+  .vc-mini {
+    height: 36px;
+  }
+}
+
+/* Mobile site: fixed layer that tracks the player's box (src/layer.js), so the trigger
+   and track sit above the player's tap-catching controls overlay. Only its children
+   take taps. */
+#vc-layer {
+  position: fixed;
+  z-index: 998000;
+  pointer-events: none;
+}
+
+#vc-layer > #vc-fab {
+  pointer-events: auto;
+}

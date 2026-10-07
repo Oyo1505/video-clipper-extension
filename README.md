@@ -30,6 +30,22 @@ Limites connues :
 4. Aller sur une page `youtube.com/watch?v=...`, un bouton rond rouge 🎬
    apparait en bas a droite.
 
+## Firefox pour Android
+
+Le meme code tourne sur Firefox pour Android (`gecko_android` dans
+`manifest.json`). YouTube y sert le site mobile `m.youtube.com` : le bouton 🎬
+flotte dans le coin haut-gauche du lecteur (il n'y a pas de barre de controles
+ou l'inserer), et le panneau prend toute la largeur de l'ecran.
+
+Tester sur un telephone :
+1. Sur le telephone : Firefox (ou Firefox Nightly) -> Parametres -> A propos ->
+   toucher 5 fois le logo, puis activer "Debogage USB" dans les parametres.
+   Activer aussi le debogage USB Android (options developpeur).
+2. Sur le PC : `npx web-ext run -t firefox-android --android-device <id>`
+   depuis ce dossier (`adb devices` donne l'id).
+3. Pour publier : `scripts/package-firefox.ps1`, puis sur addons.mozilla.org
+   cocher "Firefox pour Android" comme plateforme compatible.
+
 ## Utilisation
 
 1. Lancer la lecture de la video a l'endroit voulu.

@@ -46,7 +46,8 @@ publishes a frozen object (`VC.selection`, `VC.panel`, ...). Load order (in `man
 | `dom.js` | Lookups into YouTube's DOM (selectors live here only) |
 | `state.js` | The only mutable state: `VC.state = { video, clip, isRecording }` |
 | `selection.js` | **Pure** selection rules (`setBound`, `markAt`, `nudge`, `slideTo`); return new clips |
-| `drag.js` / `track.js` | Pointer dragging / the track overlay (render, position, tooltip) |
+| `layer.js` | Where in-player UI attaches (the player, or a fixed layer on m.youtube.com) |
+| `drag.js` / `pinch.js` / `track.js` | Pointer dragging / two-finger pinch resize / the track overlay (render, position, tooltip) |
 | `panel.js` / `view.js` | Control panel; `view.refresh()` redraws track + panel from `state.clip` |
 | `marks.js` / `preview.js` | Mark-at-playhead, nudge, reset / preview playback |
 | `recorder.js` / `download.js` / `exporter.js` | Real-time recording (UI-agnostic) / file save / export flow |
@@ -63,6 +64,18 @@ The extension does **not** extract YouTube's video stream. It captures the real 
 the selected range. This is more robust than stream extraction (which breaks on every YouTube
 player change) but means clip generation happens in real time — a 30s clip takes ~30s to record.
 Known limits: doesn't work on DRM/Widevine content, output is WebM only (no MP4 transcode).
+Firefox only has the prefixed `mozCaptureStream()`, so always go through
+`util.captureStreamOf()` / `util.canCaptureStream()`, never `video.captureStream` directly.
+
+### Firefox for Android (m.youtube.com)
+
+The same build runs on Firefox for Android, where YouTube serves `m.youtube.com` with a
+different player: no `.ytp-right-controls` / `.ytp-chrome-bottom`. `dom.isMobileSite()`
+switches the 🎬 button to a floating one. The mobile player's tap-catching controls overlay
+sits above anything inside `#movie_player`, so there the button and track live in a fixed
+layer on `document.body` that follows the player's box (`layer.host()`), and
+`dom.isolateFromPlayer()` stops taps on our UI from reaching the page's own handlers. The track falls back to
+`FALLBACK_BOTTOM_OFFSET_PX`. Test on a device with `web-ext run -t firefox-android`.
 
 ### Injected UI is idempotent, because YouTube's own JS fights back
 
@@ -100,8 +113,9 @@ open), plus -5/-1/+1/+5s nudges.
 `VC.state.clip` (`{ start, end, duration }` in absolute video seconds) is the single source of
 truth for the selection, `null` while the panel is closed (so `clip !== null` means "open"). It is
 treated as immutable: always replace it with the result of a `selection.*` function, then call
-`VC.view.refresh()`. **`MAX_CLIP_SECONDS` is enforced in one place, `selection.setBound()`**, which
-handle drags, marks and nudges all go through (`slideTo` preserves the span, so it can't exceed it).
+`VC.view.refresh()`. **`MAX_CLIP_SECONDS` is enforced in `selection.setBound()`**, which
+handle drags, marks and nudges all go through (`slideTo` preserves the span, so it can't exceed it),
+and in `selection.resizeAround()`, used by the two-finger pinch.
 
 Async flows (`preview.js`, `exporter.js`) copy `state.video`/`state.clip` into locals first: the
 user can navigate away mid-recording, which resets the module-level state.

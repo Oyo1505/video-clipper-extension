@@ -7,7 +7,7 @@
     PREFERRED_MIME_TYPE,
     FALLBACK_MIME_TYPE,
   } = VC.config;
-  const { safePlay } = VC.util;
+  const { safePlay, captureStreamOf } = VC.util;
 
   const pickMimeType = () =>
     MediaRecorder.isTypeSupported(PREFERRED_MIME_TYPE) ? PREFERRED_MIME_TYPE : FALLBACK_MIME_TYPE;
@@ -70,7 +70,8 @@
   async function record(video, { start, end }, onProgress) {
     await seekTo(video, start);
 
-    const recorder = new MediaRecorder(video.captureStream(), { mimeType: pickMimeType() });
+    const stream = captureStreamOf(video);
+    const recorder = new MediaRecorder(stream, { mimeType: pickMimeType() });
     const blobReady = collectBlob(recorder);
 
     recorder.start();
@@ -81,6 +82,9 @@
     } finally {
       video.pause();
       if (recorder.state !== "inactive") recorder.stop();
+      // Firefox's mozCaptureStream() diverts the element's audio away from the speakers
+      // for as long as the captured tracks are live.
+      stream.getTracks().forEach((track) => track.stop());
     }
     return blobReady;
   }

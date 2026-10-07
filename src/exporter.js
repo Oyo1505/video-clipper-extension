@@ -1,12 +1,12 @@
 // The "validate and download" flow: guards, UI feedback, recording, download, cleanup.
 (() => {
   const { state, messages } = VC;
-  const { safePlay } = VC.util;
+  const { safePlay, canCaptureStream } = VC.util;
   const { MIN_EXPORT_SECONDS } = VC.config;
 
   // Why the export can't start, or null when it can.
   function findBlocker(video, clipSeconds) {
-    if (typeof video.captureStream !== "function") return messages.captureUnsupported;
+    if (!canCaptureStream(video)) return messages.captureUnsupported;
     if (clipSeconds <= MIN_EXPORT_SECONDS) return messages.selectionTooShort;
     return null;
   }

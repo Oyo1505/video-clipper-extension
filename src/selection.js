@@ -53,10 +53,29 @@
     return { ...clip, start: newStart, end: newStart + span };
   }
 
+  /**
+   * Resizes the selection to `span` seconds centred on `center` (shifted back inside the
+   * video near its edges), keeping it non-empty and within MAX_CLIP_SECONDS.
+   */
+  function resizeAround(clip, center, span) {
+    const length = clamp(span, MIN_SELECTION_SECONDS, Math.min(MAX_CLIP_SECONDS, clip.duration));
+    const start = clamp(center - length / 2, 0, clip.duration - length);
+    return { ...clip, start, end: start + length };
+  }
+
   const spanOf = (clip) => clip.end - clip.start;
 
   /** True when a <=60s clip is too small on the track to grab comfortably. */
   const isLongVideo = (clip) => clip !== null && clip.duration >= LONG_VIDEO_SECONDS;
 
-  VC.selection = Object.freeze({ createAt, setBound, nudge, markAt, slideTo, spanOf, isLongVideo });
+  VC.selection = Object.freeze({
+    createAt,
+    setBound,
+    nudge,
+    markAt,
+    slideTo,
+    resizeAround,
+    spanOf,
+    isLongVideo,
+  });
 })();
